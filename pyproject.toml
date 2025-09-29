@@ -1,0 +1,20 @@
+[project]
+name = "robofin-joycon"
+version = "0.1.0"
+description = "Joy-Con input on macOS using HIDAPI, managed by uv."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "joycon-python>=0.2.4",
+  "hid>=1.0.5",
+  "pyglm>=2.5",
+]
+
+[project.scripts]
+# Optional helper entry points (you can remove these if not needed)
+joycon-host-bridge = "scripts.host_bridge:main"
+joycon-container-recv = "scripts.container_receiver:main"
+
+[tool.uv]
+# uv will create and manage a virtual environment and lock file automatically.
+# You can pin additional settings here if you need (left minimal on purpose).
