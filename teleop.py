@@ -7,36 +7,86 @@ from typing import Dict, Any
 
 from pyjoycon import JoyCon, get_L_id, get_R_id
 
+# Destination for UDP packets
 DEST_HOST, DEST_PORT = "127.0.0.1", 5005
+
+
+def _sanitize_key(key: str) -> str:
+    """Convert Joy-Con status keys into Python-friendly attribute names."""
+    return key.replace("-", "_")
+
+
+def _dict_to_namespace(data: Any) -> Any:
+    """Recursively wrap nested dictionaries into SimpleNamespace instances."""
+    if isinstance(data, dict):
+        return SimpleNamespace(**{_sanitize_key(k): _dict_to_namespace(v) for k, v in data.items()})
+    return data
+
+
+def _namespace_to_dict(data: Any) -> Any:
+    """Recursively convert SimpleNamespace objects back into dictionaries."""
+    if isinstance(data, SimpleNamespace):
+        return {k: _namespace_to_dict(v) for k, v in vars(data).items()}
+    if isinstance(data, dict):
+        return {k: _namespace_to_dict(v) for k, v in data.items()}
+    if isinstance(data, (list, tuple)):
+        return [_namespace_to_dict(v) for v in data]
+    return data
 
 
 def to_attr_status(st: Dict[str, Any]) -> SimpleNamespace:
     """Wrap pyjoycon's dict status into an attribute-access object."""
-    sticks = st.get("analog-sticks", {})
-    left = sticks.get("left", {})
-    right = sticks.get("right", {})
-    buttons = st.get("buttons", {})
-    b_left = buttons.get("left", {})
-    b_right = buttons.get("right", {})
-    b_shared = buttons.get("shared", {})
+    status = _dict_to_namespace(st)
 
-    stick_left  = SimpleNamespace(x=left.get("horizontal", 0),  y=left.get("vertical", 0))
-    stick_right = SimpleNamespace(x=right.get("horizontal", 0), y=right.get("vertical", 0))
+    sticks = status.analog_sticks
+    left = sticks.left
+    right = sticks.right
 
-    # Expose common buttons as attributes (0/1 integers per pyjoycon)
+    buttons = status.buttons
+    b_left = buttons.left
+    b_right = buttons.right
+    b_shared = buttons.shared
+
+    stick_left = SimpleNamespace(x=left.horizontal, y=left.vertical)
+    stick_right = SimpleNamespace(x=right.horizontal, y=right.vertical)
+
+    # Flatten button states for quick access and JSON payloads
     btn = SimpleNamespace(
-        a=b_right.get("a", 0), b=b_right.get("b", 0),
-        x=b_right.get("x", 0), y=b_right.get("y", 0),
-        r=b_right.get("r", 0), zr=b_right.get("zr", 0),
-        l=b_left.get("l", 0),  zl=b_left.get("zl", 0),
-        plus=b_shared.get("plus", 0), minus=b_shared.get("minus", 0),
-        home=b_shared.get("home", 0), capture=b_shared.get("capture", 0),
-        stick_left=b_shared.get("l-stick", 0),   # stick press (L)
-        stick_right=b_shared.get("r-stick", 0),  # stick press (R)
-        sl_left=b_left.get("sl", 0), sr_left=b_left.get("sr", 0),
-        sl_right=b_right.get("sl", 0), sr_right=b_right.get("sr", 0),
+        a=b_right.a,
+        b=b_right.b,
+        x=b_right.x,
+        y=b_right.y,
+        r=b_right.r,
+        zr=b_right.zr,
+        sl_right=b_right.sl,
+        sr_right=b_right.sr,
+        l=b_left.l,
+        zl=b_left.zl,
+        sl_left=b_left.sl,
+        sr_left=b_left.sr,
+        dpad_up=b_left.up,
+        dpad_down=b_left.down,
+        dpad_left=b_left.left,
+        dpad_right=b_left.right,
+        plus=b_shared.plus,
+        minus=b_shared.minus,
+        home=b_shared.home,
+        capture=b_shared.capture,
+        stick_left=b_shared.l_stick,
+        stick_right=b_shared.r_stick,
+        charging_grip=b_shared.charging_grip,
     )
-    return SimpleNamespace(stick_left=stick_left, stick_right=stick_right, buttons=btn)
+
+    return SimpleNamespace(
+        battery=status.battery,
+        accel=status.accel,
+        gyro=status.gyro,
+        analog_sticks=sticks,
+        button_groups=buttons,
+        stick_left=stick_left,
+        stick_right=stick_right,
+        buttons=btn,
+    )
 
 
 def normalize_axis(v: int, center: int = 2048, span: int = 2048, deadzone: float = 0.05) -> float:
@@ -62,13 +112,14 @@ def open_joycon(side: str) -> JoyCon:
 
 
 def main() -> None:
-    # Do not shadow builtins like `str`; use clear names.
+    # Open both Joy-Cons
     jcl = open_joycon("L")
     jcr = open_joycon("R")
 
+    # Create a UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    # Optional: tune per your app
+    # Set a fixed loop rate
     loop_hz = 100.0
     dt = 1.0 / loop_hz
 
@@ -88,13 +139,21 @@ def main() -> None:
             rx = normalize_axis(st_right.stick_right.x)
             ry = normalize_axis(st_right.stick_right.y)
 
-            # Prepare a JSON-safe payload (only primitives and dicts)
+            # Prepare a JSON-safe payload
             payload = {
                 "ts": time.time(),
-                "lx": lx, "ly": ly,
-                "rx": rx, "ry": ry,
-                "left_buttons": vars(st_left.buttons),
-                "right_buttons": vars(st_right.buttons),
+                "lx": lx,
+                "ly": ly,
+                "rx": rx,
+                "ry": ry,
+                "left_buttons": _namespace_to_dict(st_left.buttons),
+                "right_buttons": _namespace_to_dict(st_right.buttons),
+                "left_accel": _namespace_to_dict(st_left.accel),
+                "right_accel": _namespace_to_dict(st_right.accel),
+                "left_gyro": _namespace_to_dict(st_left.gyro),
+                "right_gyro": _namespace_to_dict(st_right.gyro),
+                "left_battery": _namespace_to_dict(st_left.battery),
+                "right_battery": _namespace_to_dict(st_right.battery),
             }
             
             # Send via UDP
