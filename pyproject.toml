@@ -1,5 +1,5 @@
 [project]
-name = "robofin-joycon"
+name = "aloha-joycon"
 version = "0.1.0"
 description = "Joy-Con input on macOS using HIDAPI, managed by uv."
 readme = "README.md"
