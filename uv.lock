@@ -68,7 +68,7 @@ wheels = [
 ]
 
 [[package]]
-name = "robofin-joycon"
+name = "aloha-joycon"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
