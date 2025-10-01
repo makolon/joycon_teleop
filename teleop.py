@@ -100,6 +100,32 @@ def normalize_axis(v: int, center: int = 2048, span: int = 2048, deadzone: float
     return max(-1.0, min(1.0, x))
 
 
+def normalize_accel(accel_data: Any) -> SimpleNamespace:
+    """
+    Normalize accelerometer data to [-1, 1] range.
+    Based on observed values, accel typically ranges from -5000 to +6000.
+    """
+    max_accel = 6000.0
+    return SimpleNamespace(
+        x=max(-1.0, min(1.0, accel_data.x / max_accel)),
+        y=max(-1.0, min(1.0, accel_data.y / max_accel)),
+        z=max(-1.0, min(1.0, accel_data.z / max_accel))
+    )
+
+
+def normalize_gyro(gyro_data: Any) -> SimpleNamespace:
+    """
+    Normalize gyroscope data to [-1, 1] range.
+    Based on observed values, gyro typically ranges from -5000 to +5000.
+    """
+    max_gyro = 5000.0
+    return SimpleNamespace(
+        x=max(-1.0, min(1.0, gyro_data.x / max_gyro)),
+        y=max(-1.0, min(1.0, gyro_data.y / max_gyro)),
+        z=max(-1.0, min(1.0, gyro_data.z / max_gyro))
+    )
+
+
 def open_joycon(side: str) -> JoyCon:
     """Open a Joy-Con by side ('L' or 'R') and print its IDs."""
     if side.upper() == "R":
@@ -139,6 +165,12 @@ def main() -> None:
             rx = normalize_axis(st_right.stick_right.x)
             ry = normalize_axis(st_right.stick_right.y)
 
+            # Normalize accelerometer and gyro data to [-1, 1] range
+            left_accel = normalize_accel(st_left.accel)
+            right_accel = normalize_accel(st_right.accel)
+            left_gyro = normalize_gyro(st_left.gyro)
+            right_gyro = normalize_gyro(st_right.gyro)
+
             # Prepare a JSON-safe payload
             payload = {
                 "ts": time.time(),
@@ -148,10 +180,10 @@ def main() -> None:
                 "ry": ry,
                 "left_buttons": _namespace_to_dict(st_left.buttons),
                 "right_buttons": _namespace_to_dict(st_right.buttons),
-                "left_accel": _namespace_to_dict(st_left.accel),
-                "right_accel": _namespace_to_dict(st_right.accel),
-                "left_gyro": _namespace_to_dict(st_left.gyro),
-                "right_gyro": _namespace_to_dict(st_right.gyro),
+                "left_accel": _namespace_to_dict(left_accel),
+                "right_accel": _namespace_to_dict(right_accel),
+                "left_gyro": _namespace_to_dict(left_gyro),
+                "right_gyro": _namespace_to_dict(right_gyro),
                 "left_battery": _namespace_to_dict(st_left.battery),
                 "right_battery": _namespace_to_dict(st_right.battery),
             }
